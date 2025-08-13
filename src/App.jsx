@@ -4,6 +4,8 @@ export default function App() {
   const canvasRef = useRef(null)
   const isDrawingRef = useRef(false)
   const lastPtRef = useRef({ x: 0, y: 0 })
+  const [tool, setTool] = useState("pen")
+  const [eraserSize, setEraserSize] = useState(12)
   const [brushSize, setBrushSize] = useState(4)
   const [isSending, setIsSending] = useState(false)
   const [name, setName] = useState("")
@@ -11,21 +13,31 @@ export default function App() {
   const [rateLimitSeconds, setRateLimitSeconds] = useState(0)
   const [nameErrorActive, setNameErrorActive] = useState(false)
 
+  function fmt(seconds) {
+    const m = Math.floor(seconds / 60)
+    const s = seconds % 60
+    return m > 0 ? `${m}:${String(s).padStart(2, "0")}` : `${s}s`
+  }
+
+  function computeRemaining() {
+    const until = Number(localStorage.getItem("rateLimitUntil") || 0)
+    return Math.max(0, Math.ceil((until - Date.now()) / 1000))
+  }
+
   useEffect(() => {
-    let rateLimit = localStorage.getItem("rateLimit")
-    if (Number(rateLimit) > 0) {
-      setIsRateLimited(true)
+    const r0 = computeRemaining()
+    setRateLimitSeconds(r0)
+    setIsRateLimited(r0 > 0)
 
-      setTimeout(() => {
-        setIsRateLimited(false)
-        localStorage.removeItem("rateLimit")
-      }, Number(rateLimit) * 1000)
+    const id = setInterval(() => {
+      const r = computeRemaining()
+      setRateLimitSeconds(r)
+      setIsRateLimited(r > 0)
+      if (r === 0) localStorage.removeItem("rateLimitUntil")
+    }, 1000)
+  })
 
-      setTimeout(() => {
-        setRateLimitSeconds((prev) => prev - 1)
-      }, 1000)
-    }
-
+  useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
 
@@ -71,14 +83,24 @@ export default function App() {
   const draw = (e) => {
     if (!isDrawingRef.current) return
     e.preventDefault()
-    const ctx = canvasRef.current.getContext("2d")
-    ctx.lineWidth = brushSize
+
+    const canvas = canvasRef.current
+    const ctx = canvas.getContext("2d")
+
+    const isEraser = tool === "eraser"
+    ctx.lineWidth = isEraser ? eraserSize : brushSize
+    ctx.strokeStyle = isEraser ? "#ffffff" : "#111827"
+    ctx.lineCap = "round"
+    ctx.lineJoin = "round"
+
     const { x, y } = getRelativePoint(e)
     const { x: lx, y: ly } = lastPtRef.current
+
     ctx.beginPath()
     ctx.moveTo(lx, ly)
     ctx.lineTo(x, y)
     ctx.stroke()
+
     lastPtRef.current = { x, y }
   }
 
@@ -99,52 +121,85 @@ export default function App() {
   }
 
   async function sendAndPrint() {
-    if (name == "") {
+    if (name === "") {
       setNameErrorActive(true)
       return
     }
+    if (isRateLimited || isSending) return
 
     const canvas = canvasRef.current
-    
-    if (!(canvas instanceof HTMLCanvasElement)) {
-      console.error("Canvas not found or ref not attached")
-      return
-    }
+    if (!(canvas instanceof HTMLCanvasElement)) return
 
     setIsSending(true)
 
-    const blob = await new Promise((resolve) =>
-      canvas.toBlob((b) => resolve(b), "image/png")
-    )
+    try {
+      const blob = await new Promise((resolve, reject) =>
+        canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("toBlob failed"))), "image/png")
+      )
 
-    const form = new FormData()
-    form.append("image", blob, "drawing.png")
-    form.append("name", name)
+      const form = new FormData()
+      form.append("image", blob, "drawing.png")
+      form.append("name", name)
 
-    const response = await fetch("/api/print", {
-      method: "POST",
-      body: form,
-    })
+      const controller = new AbortController()
+      const t = setTimeout(() => controller.abort(), 15000)
 
-    if (!response.ok) {
-      console.error(await response.text())
+      const resp = await fetch("/api/print", {
+        method: "POST",
+        body: form,
+        signal: controller.signal,
+      })
+
+      clearTimeout(t)
+
+      if (!resp.ok) {
+        const text = await resp.text().catch(() => "")
+        throw new Error(`Print failed: ${resp.status} ${text}`)
+      }
+
+      const cooldownSec = 30
+      localStorage.setItem("rateLimitUntil", String(Date.now() + cooldownSec * 1000))
+      setRateLimitSeconds(cooldownSec)
+      setIsRateLimited(true)
+    } catch (err) {
+      console.error(err)
+    } finally {
       setIsSending(false)
     }
-    localStorage.setItem("rateLimit", 30)
-    setIsSending(false)
   }
+
 
   return (
     <div className="grid place-items-center">
       <div className="flex flex-row items-center mt-4 mb-4">
-        <p className="pr-6">Brush size: {brushSize}</p>
-        <input
+        <div className="flex flex-col items-center">
+          <button
+            type="button"
+            onClick={() => setTool((t) => (t === "pen" ? "eraser" : "pen"))}
+            className="px-3 py-1 mb-2 mt-10 border rounded"
+            aria-pressed={tool === "eraser"}
+          >
+            {tool === "eraser" ? "Eraser" : "Pen"}
+          </button>
+          <label className="pr-3">Brush size: {brushSize}</label>
+          <input
             type="range"
             min={1}
             max={20}
             value={brushSize}
             onChange={(e) => setBrushSize(Number(e.target.value))}
-        />
+          />
+          <div className="flex flex-col items-center">
+            <label className="px-3">Eraser size: {eraserSize}</label>
+            <input
+              type="range"
+              min={4}
+              max={30}
+              value={eraserSize}
+              onChange={(e) => setEraserSize(Number(e.target.value))}
+            />
+          </div>
+        </div>
       </div>
       <canvas
         ref={canvasRef}
@@ -162,8 +217,18 @@ export default function App() {
         <input placeholder="Your name" value={name} onChange={(e) => { setName(e.target.value); setNameErrorActive(false) }} className="mt-4 p-2 border rounded" />
       </div>
       <div className="flex items-center mt-4">
-        {isRateLimited && <p className="text-red-500 mr-4">Try again in {rateLimitSeconds} seconds.</p>}
-        <button className="mr-6" onClick={sendAndPrint} disabled={isSending || isRateLimited}>{isSending ? "Sending" : "Send"}</button>
+        <button
+          className="mr-6"
+          onClick={sendAndPrint}
+          disabled={isSending || isRateLimited}
+          title={isRateLimited ? `Please wait ${fmt(rateLimitSeconds)}` : "Send to printer"}
+        >
+          {isSending
+            ? "Sending..."
+            : isRateLimited
+              ? `Send (${rateLimitSeconds}s)`
+              : "Send"}
+        </button>
         <button onClick={handleClear}>Clear</button>
       </div>
     </div>
