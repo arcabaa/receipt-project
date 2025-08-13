@@ -7,9 +7,19 @@ export default function App() {
   const [brushSize, setBrushSize] = useState(4);
   const [isSending, setIsSending] = useState(false);
   const [name, setName] = useState("");
+  const [isRateLimited, setIsRateLimited] = useState(false);
   const [nameErrorActive, setNameErrorActive] = useState(false);
 
   useEffect(() => {
+    let rateLimit = localStorage.getItem("rateLimit")
+    if (Number(rateLimit) > 0) {
+      setIsRateLimited(true);
+      setTimeout(() => {
+        setIsRateLimited(false);
+        localStorage.removeItem("rateLimit");
+      }, Number(rateLimit) * 1000);
+    }
+
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -114,6 +124,7 @@ export default function App() {
       console.error(await response.text());
       setIsSending(false);
     }
+    localStorage.setItem("rateLimit", 30);
     setIsSending(false);
   }
 
