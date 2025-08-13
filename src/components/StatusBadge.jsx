@@ -7,7 +7,7 @@ export default function StatusBadge({ status }) {
   const label = status || "unknown"
   return (
     <span className={`inline-flex items-center px-2 py-1 text-xs rounded-full text-white ${color}`}>
-      Paper: {label}
+      Paper Status: {label}
     </span>
   )
 }
