@@ -1,6 +1,6 @@
 export const config = {
   api: {
-    bodyParser: false, // don't parse the body, we want to stream FormData
+    bodyParser: false,
   },
 };
 
@@ -11,6 +11,7 @@ export default async function handler(req, res) {
   }
 
   const NGROK_URL = process.env.NGROK_URL;
+  console.log("NGROK_URL:", NGROK_URL);
   const API_KEY = process.env.API_KEY;
 
   try {
