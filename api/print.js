@@ -27,13 +27,13 @@ export default async function handler(req, res) {
       method: "POST",
       headers: {
         "x-api-key": API_KEY,
-        "content-type": contentType, // keep boundary
+        "content-type": contentType,
         ...(req.headers["content-length"]
           ? { "content-length": req.headers["content-length"] }
           : {}),
       },
-      body: req,             // stream the raw IncomingMessage
-      duplex: "half",        // <-- REQUIRED when sending a stream body in Node
+      body: req,
+      duplex: "half",
       signal: controller.signal,
     });
 
