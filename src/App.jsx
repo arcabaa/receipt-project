@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
 export default function App() {
   const canvasRef = useRef(null)
@@ -35,7 +35,9 @@ export default function App() {
       setIsRateLimited(r > 0)
       if (r === 0) localStorage.removeItem("rateLimitUntil")
     }, 1000)
-  })
+
+    return () => clearInterval(id)
+  }, [])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -47,65 +49,54 @@ export default function App() {
 
     canvas.width = printerWidthPx
     canvas.height = heightPx
-
     canvas.style.width = `${printerWidthPx}px`
     canvas.style.height = `${heightPx}px`
 
     const ctx = canvas.getContext("2d")
-
     ctx.fillStyle = "#ffffff"
     ctx.fillRect(0, 0, printerWidthPx, heightPx)
-
     ctx.strokeStyle = "#cccccc"
     ctx.strokeRect(0, 0, safeDrawWidth, heightPx)
-
     ctx.lineCap = "round"
     ctx.lineJoin = "round"
     ctx.strokeStyle = "#111827"
     ctx.lineWidth = brushSize
   }, [])
 
-
-  const getRelativePoint = (event) => {
+  const getRelativePoint = e => {
     const canvas = canvasRef.current
     const rect = canvas.getBoundingClientRect()
-    const clientX = event.touches?.length ? event.touches[0].clientX : event.clientX
-    const clientY = event.touches?.length ? event.touches[0].clientY : event.clientY
-    return { x: clientX - rect.left, y: clientY - rect.top }
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top }
   }
 
-  const startDrawing = (e) => {
+  const onPointerDown = e => {
     e.preventDefault()
+    const canvas = canvasRef.current
+    canvas?.setPointerCapture?.(e.pointerId)
     isDrawingRef.current = true
     lastPtRef.current = getRelativePoint(e)
   }
 
-  const draw = (e) => {
+  const onPointerMove = e => {
     if (!isDrawingRef.current) return
     e.preventDefault()
-
     const canvas = canvasRef.current
     const ctx = canvas.getContext("2d")
-
     const isEraser = tool === "eraser"
     ctx.lineWidth = isEraser ? eraserSize : brushSize
     ctx.strokeStyle = isEraser ? "#ffffff" : "#111827"
     ctx.lineCap = "round"
     ctx.lineJoin = "round"
-
     const { x, y } = getRelativePoint(e)
     const { x: lx, y: ly } = lastPtRef.current
-
     ctx.beginPath()
     ctx.moveTo(lx, ly)
     ctx.lineTo(x, y)
     ctx.stroke()
-
     lastPtRef.current = { x, y }
   }
 
-  const endDrawing = (e) => {
-    if (!isDrawingRef.current) return
+  const onPointerUpOrCancel = e => {
     e.preventDefault()
     isDrawingRef.current = false
   }
@@ -134,7 +125,7 @@ export default function App() {
 
     try {
       const blob = await new Promise((resolve, reject) =>
-        canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("toBlob failed"))), "image/png")
+        canvas.toBlob(b => (b ? resolve(b) : reject(new Error("toBlob failed"))), "image/png")
       )
 
       const form = new FormData()
@@ -147,7 +138,7 @@ export default function App() {
       const resp = await fetch("/api/print", {
         method: "POST",
         body: form,
-        signal: controller.signal,
+        signal: controller.signal
       })
 
       clearTimeout(t)
@@ -168,14 +159,13 @@ export default function App() {
     }
   }
 
-
   return (
     <div className="grid place-items-center">
       <div className="flex flex-row items-center mt-4 mb-4">
         <div className="flex flex-col items-center">
           <button
             type="button"
-            onClick={() => setTool((t) => (t === "pen" ? "eraser" : "pen"))}
+            onClick={() => setTool(t => (t === "pen" ? "eraser" : "pen"))}
             className="px-3 py-1 mb-2 mt-10 border rounded"
             aria-pressed={tool === "eraser"}
           >
@@ -187,7 +177,7 @@ export default function App() {
             min={1}
             max={20}
             value={brushSize}
-            onChange={(e) => setBrushSize(Number(e.target.value))}
+            onChange={e => setBrushSize(Number(e.target.value))}
           />
           <div className="flex flex-col items-center">
             <label className="px-3">Eraser size: {eraserSize}</label>
@@ -196,25 +186,32 @@ export default function App() {
               min={4}
               max={30}
               value={eraserSize}
-              onChange={(e) => setEraserSize(Number(e.target.value))}
+              onChange={e => setEraserSize(Number(e.target.value))}
             />
           </div>
         </div>
       </div>
       <canvas
         ref={canvasRef}
-        className="shadow-lg border-radius-lg"
-        onMouseDown={startDrawing}
-        onMouseMove={draw}
-        onMouseUp={endDrawing}
-        onMouseLeave={endDrawing}
-        onTouchStart={startDrawing}
-        onTouchMove={draw}
-        onTouchEnd={endDrawing}
+        className="shadow-lg border-radius-lg select-none touch-none"
+        style={{ touchAction: "none", userSelect: "none" }}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUpOrCancel}
+        onPointerLeave={onPointerUpOrCancel}
+        onPointerCancel={onPointerUpOrCancel}
       />
       <div>
         <p className="text-red-500 mt-4 text-center">{nameErrorActive && "* Name is required *"}</p>
-        <input placeholder="Your name" value={name} onChange={(e) => { setName(e.target.value); setNameErrorActive(false) }} className="mt-4 p-2 border rounded" />
+        <input
+          placeholder="Your name"
+          value={name}
+          onChange={e => {
+            setName(e.target.value)
+            setNameErrorActive(false)
+          }}
+          className="mt-4 p-2 border rounded"
+        />
       </div>
       <div className="flex items-center mt-4">
         <button
@@ -223,11 +220,7 @@ export default function App() {
           disabled={isSending || isRateLimited}
           title={isRateLimited ? `Please wait ${fmt(rateLimitSeconds)}` : "Send to printer"}
         >
-          {isSending
-            ? "Sending..."
-            : isRateLimited
-              ? `Send (${rateLimitSeconds}s)`
-              : "Send"}
+          {isSending ? "Sending..." : isRateLimited ? `Send (${fmt(rateLimitSeconds)})` : "Send"}
         </button>
         <button onClick={handleClear}>Clear</button>
       </div>

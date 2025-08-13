@@ -6,8 +6,10 @@ import tailwindcss from '@tailwindcss/vite'
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
+    host: true,
+    port: 5173,
     proxy: {
-      '/print': { target: 'http://100.37.86.239:3000/', changeOrigin: true }
+      '/print': { target: 'http://localhost:3000/', changeOrigin: true }
     }
   }
 })
