@@ -7,7 +7,7 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     proxy: {
-      '/print': { target: 'http://100.37.86.239:3000', changeOrigin: true }
+      '/print': { target: 'http://100.37.86.239:3000/', changeOrigin: true }
     }
   }
 })

@@ -8,7 +8,6 @@ export default function App() {
   const [isSending, setIsSending] = useState(false);
   const [name, setName] = useState("");
   const [nameErrorActive, setNameErrorActive] = useState(false);
-  const ENDPOINT = "http://100.37.86.239:3000/print";
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -104,9 +103,9 @@ export default function App() {
 
     const form = new FormData();
     form.append("image", blob, "drawing.png");
-    form.append("name", name); 
+    form.append("name", name);
 
-    const response = await fetch(ENDPOINT, {
+    const response = await fetch("/api/print", {
       method: "POST",
       body: form,
     });
