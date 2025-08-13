@@ -8,31 +8,27 @@ export default function App() {
   const [isSending, setIsSending] = useState(false);
   const [name, setName] = useState("");
   const [nameErrorActive, setNameErrorActive] = useState(false);
-  const ENDPOINT = import.meta?.env?.VITE_BACKEND_URL || "/print"; // dev: proxy /print -> http://localhost:3000
+  const ENDPOINT = import.meta?.env?.VITE_BACKEND_URL || "/print";
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const printerWidthPx = 250;    // TM-T88V max width in dots
-    const safeDrawWidth = 250;     // avoid right-edge clipping
-    const heightPx = 400;          // your desired height
+    const printerWidthPx = 250;
+    const safeDrawWidth = 250;
+    const heightPx = 400;
 
-    // Internal resolution for printing
     canvas.width = printerWidthPx;
     canvas.height = heightPx;
 
-    // On-screen size — match to printer px for 1:1
     canvas.style.width = `${printerWidthPx}px`;
     canvas.style.height = `${heightPx}px`;
 
     const ctx = canvas.getContext("2d");
 
-    // Fill background white
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, printerWidthPx, heightPx);
 
-    // Optional: visible boundary for safe drawing area
     ctx.strokeStyle = "#cccccc";
     ctx.strokeRect(0, 0, safeDrawWidth, heightPx);
 
