@@ -1,14 +1,158 @@
-import { useState } from 'react'
-import './App.css'
+import React, { useEffect, useRef, useState } from "react";
 
-function App() {
-  const [count, setCount] = useState(0)
+export default function App() {
+  const canvasRef = useRef(null);
+  const isDrawingRef = useRef(false);
+  const lastPtRef = useRef({ x: 0, y: 0 });
+  const [brushSize, setBrushSize] = useState(4);
+  const [isSending, setIsSending] = useState(false);
+  const [name, setName] = useState("");
+  const [nameErrorActive, setNameErrorActive] = useState(false);
+  const ENDPOINT = import.meta?.env?.VITE_BACKEND_URL || "/print"; // dev: proxy /print -> http://localhost:3000
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const printerWidthPx = 250;    // TM-T88V max width in dots
+    const safeDrawWidth = 250;     // avoid right-edge clipping
+    const heightPx = 400;          // your desired height
+
+    // Internal resolution for printing
+    canvas.width = printerWidthPx;
+    canvas.height = heightPx;
+
+    // On-screen size — match to printer px for 1:1
+    canvas.style.width = `${printerWidthPx}px`;
+    canvas.style.height = `${heightPx}px`;
+
+    const ctx = canvas.getContext("2d");
+
+    // Fill background white
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, printerWidthPx, heightPx);
+
+    // Optional: visible boundary for safe drawing area
+    ctx.strokeStyle = "#cccccc";
+    ctx.strokeRect(0, 0, safeDrawWidth, heightPx);
+
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = "#111827";
+    ctx.lineWidth = brushSize;
+  }, []);
+
+
+  const getRelativePoint = (event) => {
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    const clientX = event.touches?.length ? event.touches[0].clientX : event.clientX;
+    const clientY = event.touches?.length ? event.touches[0].clientY : event.clientY;
+    return { x: clientX - rect.left, y: clientY - rect.top };
+  };
+
+  const startDrawing = (e) => {
+    e.preventDefault();
+    isDrawingRef.current = true;
+    lastPtRef.current = getRelativePoint(e);
+  };
+
+  const draw = (e) => {
+    if (!isDrawingRef.current) return;
+    e.preventDefault();
+    const ctx = canvasRef.current.getContext("2d");
+    ctx.lineWidth = brushSize;
+    const { x, y } = getRelativePoint(e);
+    const { x: lx, y: ly } = lastPtRef.current;
+    ctx.beginPath();
+    ctx.moveTo(lx, ly);
+    ctx.lineTo(x, y);
+    ctx.stroke();
+    lastPtRef.current = { x, y };
+  };
+
+  const endDrawing = (e) => {
+    if (!isDrawingRef.current) return;
+    e.preventDefault();
+    isDrawingRef.current = false;
+  };
+
+  const handleClear = () => {
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+    const cssWidth = 250;
+    const cssHeight = 400;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, cssWidth, cssHeight);
+  };
+
+  async function sendAndPrint() {
+    if (name == "") {
+      setNameErrorActive(true);
+      return;
+    }
+
+    const canvas = canvasRef.current;
+    
+    if (!(canvas instanceof HTMLCanvasElement)) {
+      console.error("Canvas not found or ref not attached");
+      return;
+    }
+
+    setIsSending(true);
+
+    const blob = await new Promise((resolve) =>
+      canvas.toBlob((b) => resolve(b), "image/png")
+    );
+
+    const form = new FormData();
+    form.append("image", blob, "drawing.png");
+    form.append("name", name); 
+
+    const response = await fetch(ENDPOINT, {
+      method: "POST",
+      body: form,
+    });
+
+    if (!response.ok) {
+      console.error(await response.text());
+      setIsSending(false);
+    }
+    setIsSending(false);
+  }
 
   return (
-    <div>
-      <h1>testing</h1>
+    <div className="grid place-items-center">
+      <div className="flex flex-row items-center mt-4 mb-4">
+        <p className="pr-6">Brush size: {brushSize}</p>
+        <input
+            type="range"
+            min={1}
+            max={20}
+            value={brushSize}
+            onChange={(e) => setBrushSize(Number(e.target.value))}
+        />
+      </div>
+      <canvas
+        ref={canvasRef}
+        className="shadow-lg border-radius-lg"
+        onMouseDown={startDrawing}
+        onMouseMove={draw}
+        onMouseUp={endDrawing}
+        onMouseLeave={endDrawing}
+        onTouchStart={startDrawing}
+        onTouchMove={draw}
+        onTouchEnd={endDrawing}
+      />
+      <div>
+        <p className="text-red-500 mt-4 text-center">{nameErrorActive && "* Name is required *"}</p>
+        <input placeholder="Your name" value={name} onChange={(e) => { setName(e.target.value); setNameErrorActive(false) }} className="mt-4 p-2 border rounded" />
+      </div>
+      <div className="flex items-center mt-4">
+        <button className="mr-6" onClick={sendAndPrint} disabled={isSending}>{isSending ? "Sending" : "Send"}</button>
+        <button onClick={handleClear}>Clear</button>
+      </div>
     </div>
-  )
+  );
 }
-
-export default App
