@@ -1,3 +1,5 @@
+/* eslint-env node */
+/* global process */
 export const config = {
   api: {
     bodyParser: false,
@@ -13,11 +15,30 @@ export default async function handler(req, res) {
 
   const NGROK_URL = process.env.NGROK_URL
   const API_KEY   = process.env.API_KEY
+  const TURNSTILE_SECRET = process.env.TURNSTILE_SECRET
   if (!NGROK_URL) return res.status(500).send("Server misconfig: NGROK_URL not set")
   if (!API_KEY)   return res.status(500).send("Server misconfig: API_KEY not set")
+  if (!TURNSTILE_SECRET) return res.status(500).send("Server misconfig: TURNSTILE_SECRET not set")
 
   const contentType = req.headers["content-type"]
   if (!contentType) return res.status(400).send("Missing Content-Type")
+
+  const token = req.headers["cf-turnstile-response"]
+  if (!token) return res.status(400).send("Missing Turnstile token")
+
+  const ip = req.headers["cf-connecting-ip"] || req.headers["x-forwarded-for"] || req.socket.remoteAddress
+
+  const verify = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      secret: TURNSTILE_SECRET,
+      response: token,
+      remoteip: ip,
+    }),
+  })
+  const outcome = await verify.json()
+  if (!outcome.success) return res.status(403).send("Turnstile verification failed")
 
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 15000)

@@ -85,7 +85,8 @@ export function useCanvasDrawing(ref, { width = 250, height = 400, stroke = "#11
     e.preventDefault()
     const canvas = ref.current
     if (canvas && typeof canvas.setPointerCapture === "function") {
-      try { canvas.setPointerCapture(e.pointerId) } catch {}
+      try { canvas.setPointerCapture(e.pointerId) }
+      catch (err) { void err }
     }
     isDrawingRef.current = true
     lastPtRef.current = getRelativePoint(e)
