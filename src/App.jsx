@@ -2,7 +2,7 @@ import { useRef, useState } from "react"
 import CanvasBoard from "./components/CanvasBoard"
 import Controls from "./components/Controls"
 import StatusBadge from "./components/StatusBadge"
-import { Analytics } from "@vercel/analytics/next"
+import { Analytics } from "@vercel/analytics/react"
 import { useCanvasDrawing } from "./hooks/useCanvasDrawing"
 import { useRateLimit } from "./hooks/useRateLimit"
 import { usePrinterStatus } from "./hooks/usePrinterStatus"
@@ -69,7 +69,7 @@ export default function App() {
         remaining={remaining}
         fmt={fmt}
       />
-      <Analytics />
+      <Analytics mode="production" />
     </div>
   )
 }
