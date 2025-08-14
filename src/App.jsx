@@ -6,7 +6,6 @@ import { useCanvasDrawing } from "./hooks/useCanvasDrawing"
 import { useRateLimit } from "./hooks/useRateLimit"
 import { usePrinterStatus } from "./hooks/usePrinterStatus"
 import { sendPrint } from "./services/api"
-import { Analytics } from "@vercel/analytics/next"
 
 function fmt(seconds) {
   const m = Math.floor(seconds / 60)
@@ -46,7 +45,6 @@ export default function App() {
 
   return (
     <div className="grid place-items-center gap-4">
-      <Analytics />
       <div className="mt-2 p-2">
         <StatusBadge status={printerStatus} />
       </div>
