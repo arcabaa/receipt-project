@@ -1,4 +1,4 @@
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import CanvasBoard from "./components/CanvasBoard"
 import Controls from "./components/Controls"
 import StatusBadge from "./components/StatusBadge"
@@ -16,6 +16,8 @@ function fmt(seconds) {
 
 export default function App() {
   const canvasRef = useRef(null)
+  const turnstileRef = useRef(null)
+  const turnstileId = useRef(null)
   const [name, setName] = useState("")
   const [isSending, setIsSending] = useState(false)
   const [nameErrorActive, setNameErrorActive] = useState(false)
@@ -23,6 +25,20 @@ export default function App() {
   const drawing = useCanvasDrawing(canvasRef, { width: 250, height: 400 })
   const { remaining, limited, start } = useRateLimit({ key: "rateLimitUntil", seconds: 30 })
   const printerStatus = usePrinterStatus(0)
+
+  useEffect(() => {
+    const render = () => {
+      if (turnstileRef.current && window.turnstile) {
+        turnstileId.current = window.turnstile.render(turnstileRef.current, {
+          sitekey: import.meta.env.VITE_TURNSTILE_SITE_KEY,
+          size: "invisible",
+        })
+      }
+    }
+    if (window.turnstile) render()
+    else window.addEventListener("turnstile-loaded", render)
+    return () => window.removeEventListener("turnstile-loaded", render)
+  }, [])
 
   const handleClear = () => drawing.clear()
 
@@ -34,7 +50,14 @@ export default function App() {
       const blob = await drawing.toBlob()
       const controller = new AbortController()
       const t = setTimeout(() => controller.abort(), 15000)
-      await sendPrint({ blob, name, signal: controller.signal })
+      const token = await new Promise((resolve, reject) => {
+        window.turnstile.execute(turnstileId.current, {
+          action: "print",
+          callback: resolve,
+          "error-callback": reject,
+        })
+      })
+      await sendPrint({ blob, name, token, signal: controller.signal })
       clearTimeout(t)
       start()
     } catch (e) {
@@ -46,6 +69,7 @@ export default function App() {
 
   return (
     <div className="grid place-items-center gap-4">
+      <div ref={turnstileRef} />
       <div className="mt-2 p-2">
         <StatusBadge status={printerStatus} />
       </div>
